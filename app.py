@@ -14,7 +14,9 @@ app = FastAPI(title="Meta Ads AI Gateway", version="0.1.0")
 
 
 def _auth(x_admin_key: Optional[str]) -> None:
-    if ADMIN_KEY and x_admin_key != ADMIN_KEY:
+    if not ADMIN_KEY:
+        raise HTTPException(status_code=503, detail="ADMIN_KEY is not configured")
+    if x_admin_key != ADMIN_KEY:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
@@ -62,6 +64,7 @@ async def health() -> Dict[str, Any]:
     return {
         "ok": True,
         "meta_configured": bool(META_ACCESS_TOKEN and META_AD_ACCOUNT_ID),
+        "admin_configured": bool(ADMIN_KEY),
         "api_version": META_API_VERSION,
     }
 
