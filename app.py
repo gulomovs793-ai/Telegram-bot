@@ -10,7 +10,7 @@ META_ACCESS_TOKEN = os.getenv("META_ACCESS_TOKEN", "")
 META_AD_ACCOUNT_ID = os.getenv("META_AD_ACCOUNT_ID", "")
 ADMIN_KEY = os.getenv("ADMIN_KEY", "")
 
-app = FastAPI(title="Meta Ads AI Gateway", version="0.1.0")
+app = FastAPI(title="Meta Ads AI Gateway", version="0.2.0")
 
 
 def _auth(x_admin_key: Optional[str]) -> None:
@@ -45,6 +45,44 @@ async def meta_request(method: str, path: str, *, params: Optional[Dict[str, Any
     if response.status_code >= 400:
         raise HTTPException(status_code=502, detail={"meta_status": response.status_code, "meta": payload})
     return payload
+
+
+@app.on_event("startup")
+async def startup_meta_diagnostics() -> None:
+    if not META_ACCESS_TOKEN or not META_AD_ACCOUNT_ID:
+        print("META_DIAGNOSTIC configured=false")
+        return
+
+    base = f"https://graph.facebook.com/{META_API_VERSION}"
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        try:
+            r = await client.get(
+                f"{base}/me",
+                params={"fields": "id", "access_token": META_ACCESS_TOKEN},
+            )
+            print(f"META_DIAGNOSTIC token_status={r.status_code}")
+        except Exception as exc:
+            print(f"META_DIAGNOSTIC token_network_error={type(exc).__name__}")
+
+        try:
+            r = await client.get(
+                f"{base}/{_account_id()}/campaigns",
+                params={"fields": "id", "limit": 1, "access_token": META_ACCESS_TOKEN},
+            )
+            if r.status_code < 400:
+                print("META_DIAGNOSTIC ad_account_access=ok")
+            else:
+                try:
+                    body = r.json()
+                    err = body.get("error", {})
+                    print(
+                        "META_DIAGNOSTIC ad_account_access=failed "
+                        f"status={r.status_code} code={err.get('code')} subcode={err.get('error_subcode')}"
+                    )
+                except Exception:
+                    print(f"META_DIAGNOSTIC ad_account_access=failed status={r.status_code}")
+        except Exception as exc:
+            print(f"META_DIAGNOSTIC ad_account_network_error={type(exc).__name__}")
 
 
 class CampaignCreate(BaseModel):
